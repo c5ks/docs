@@ -32,6 +32,10 @@
           {
             "group": "Errors",
             "pages": ["errors/overview", "errors/error-codes"]
+          },
+          {
+            "group": "Admin / Operators",
+            "pages": ["admin/overview", "admin/provider-config", "admin/pricing"]
           }
         ]
       }

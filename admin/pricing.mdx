@@ -1,0 +1,128 @@
+---
+title: Pricing Rules
+description: How to configure pricing — per-token, per-image, per-video-second, and platform fees.
+---
+
+## Pricing structure
+
+Every model has three pricing layers:
+
+```yaml
+pricing:
+  provider_cost:     # What you pay the provider (your cost)
+    per_image: 0.04
+  customer_price:    # What the customer pays (your revenue)
+    per_image: 0.06
+  platform_fee:      # Additional fee on top of customer price
+    percent: 5       # 5% platform fee
+```
+
+**Margin = customer_price - provider_cost + platform_fee**
+
+## Pricing units
+
+Use the unit that matches the model's billing:
+
+| Unit | Example | Use for |
+|-|-|-|
+| `per_input_token` | 0.000003 | Text/LLM models (input) |
+| `per_output_token` | 0.000015 | Text/LLM models (output) |
+| `per_cached_token` | 0.0000015 | Cached context tokens |
+| `per_image` | 0.04 | Image generation (fixed per image) |
+| `per_megapixel` | 0.02 | Image generation (resolution-based) |
+| `per_video_second` | 0.05 | Video generation |
+| `per_audio_minute` | 0.006 | Speech-to-text |
+| `per_audio_second` | 0.015 | Text-to-speech |
+| `per_request` | 1.00 | Fixed per-call pricing |
+| `per_compute_second` | 0.0002 | Compute-time billing |
+| `per_gpu_second` | 0.0014 | GPU-time billing |
+
+You can combine multiple units. For example, a text model might use both `per_input_token` and `per_output_token`.
+
+## Platform fees
+
+Two fee types can be combined:
+
+```yaml
+platform_fee:
+  percent: 5       # 5% of customer_price
+  fixed_usd: 0.01  # Plus $0.01 flat fee per request
+```
+
+## Examples
+
+### Image generation model
+```yaml
+pricing:
+  provider_cost:
+    per_image: 0.04           # You pay $0.04 per image to provider
+  customer_price:
+    per_image: 0.06           # Customer pays $0.06 per image
+  platform_fee:
+    percent: 5                # Plus 5% fee = $0.003
+                              # Total customer cost: ~$0.063
+                              # Your margin: $0.023/image
+```
+
+### Video generation model
+```yaml
+pricing:
+  provider_cost:
+    per_video_second: 0.03    # $0.03/sec to provider
+  customer_price:
+    per_video_second: 0.05    # $0.05/sec to customer
+  platform_fee:
+    percent: 10               # 10% fee
+                              # 5-sec video: customer pays $0.275
+                              # Your margin: $0.125
+```
+
+### LLM / text model
+```yaml
+pricing:
+  provider_cost:
+    per_input_token: 0.000003
+    per_output_token: 0.000015
+  customer_price:
+    per_input_token: 0.000005
+    per_output_token: 0.000025
+  platform_fee:
+    percent: 0                # No additional fee
+```
+
+## Runtime pricing overrides
+
+For pricing changes that need to take effect immediately without a config reload, use the admin API:
+
+```bash
+# Set route-level pricing override
+curl -X POST https://api.modelroute.ai/api/v1/admin/routes/{route_id}/pricing \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_price": {
+      "per_image": 0.08
+    },
+    "effective_from": "2026-03-20T00:00:00Z"
+  }'
+```
+
+Route-level pricing overrides take precedence over YAML config pricing. They support:
+- Time-bounded pricing (`effective_from`, `effective_to`)
+- Per-organization multipliers (via `organization_model_access` table)
+
+## Balance holds
+
+When a customer submits an execution:
+
+1. ModelRoute estimates the cost using the model's pricing config
+2. Multiplies by 1.2 (20% buffer) to create a **balance hold**
+3. Minimum hold: $0.01
+4. On completion: hold is settled to actual cost (difference refunded)
+5. On failure: hold is fully released
+
+This ensures customers are never overcharged and the platform is never underfunded.
+
+## Precision
+
+All pricing uses **NanoUSD** internally (1 USD = 10^9 NanoUSD). This gives you sub-cent precision without floating-point errors. The API returns human-readable decimal strings.

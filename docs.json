@@ -15,27 +15,43 @@
         "groups": [
           {
             "group": "Getting Started",
-            "pages": ["index", "quickstart", "authentication"]
+            "pages": [
+              "index",
+              "quickstart",
+              "authentication"
+            ]
           },
           {
             "group": "Executions",
-            "pages": ["executions/overview", "executions/create", "executions/polling", "executions/webhooks"]
+            "pages": [
+              "executions/overview",
+              "executions/create",
+              "executions/polling",
+              "executions/webhooks"
+            ]
           },
           {
             "group": "Files",
-            "pages": ["files/overview", "files/uploading", "files/downloading"]
+            "pages": [
+              "files/overview",
+              "files/uploading",
+              "files/downloading"
+            ]
           },
           {
             "group": "Webhooks",
-            "pages": ["webhooks/overview", "webhooks/setup", "webhooks/verification"]
+            "pages": [
+              "webhooks/overview",
+              "webhooks/setup",
+              "webhooks/verification"
+            ]
           },
           {
             "group": "Errors",
-            "pages": ["errors/overview", "errors/error-codes"]
-          },
-          {
-            "group": "Admin / Operators",
-            "pages": ["admin/overview", "admin/provider-config", "admin/pricing"]
+            "pages": [
+              "errors/overview",
+              "errors/error-codes"
+            ]
           }
         ]
       }
@@ -68,7 +84,12 @@
     }
   },
   "contextual": {
-    "options": ["copy", "view", "claude", "cursor"]
+    "options": [
+      "copy",
+      "view",
+      "claude",
+      "cursor"
+    ]
   },
   "footer": {
     "socials": {

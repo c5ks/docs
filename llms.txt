@@ -1,0 +1,105 @@
+# ModelRoute API Reference
+
+> ModelRoute is a provider-opaque AI execution marketplace. Send canonical input, get canonical output.
+
+## Base URL
+
+https://api.modelroute.ai
+
+## Authentication
+
+All requests require a Bearer token in the Authorization header.
+Format: Authorization: Bearer sk_<64 hex>_<8 hex CRC32> (76 characters total)
+
+## Endpoints
+
+### Executions
+
+POST /v1/executions — Create an execution
+GET /v1/executions/{id} — Get execution status and result
+POST /v1/executions/{id}/cancel — Cancel a pending/processing execution
+
+Request body (POST /v1/executions):
+- model (string, required): Model slug (e.g., "flux-1.1-pro")
+- input (object, required): Model-specific input parameters
+- webhook_url (string, optional): URL for completion webhook
+- metadata (object, optional): Arbitrary key-value metadata
+
+Headers:
+- Authorization: Bearer sk_... (required)
+- Content-Type: application/json (required)
+- Idempotency-Key: unique-string (recommended)
+
+Execution statuses: PENDING, PROCESSING, AWAITING_WEBHOOK, COMPLETED, FAILED, CANCELLED, EXPIRED
+Execution modes: SYNC, ASYNC, STREAMING
+
+### Files
+
+POST /v1/files/upload — Get presigned upload URL
+  Request: { filename, content_type, size_bytes }
+  Response: { file_id, upload_url, expires_at }
+  Max file size: 100 MB
+
+PUT {upload_url} — Upload file to presigned URL
+GET /v1/files/{file_id}/download — Download a file
+GET /v1/files/{file_id}/url — Get presigned download URL
+
+File reference format: file_<uuid>
+
+### Webhooks
+
+POST /v1/webhooks/endpoints — Register webhook endpoint
+GET /v1/webhooks/endpoints — List endpoints
+PATCH /v1/webhooks/endpoints/{id} — Update endpoint
+DELETE /v1/webhooks/endpoints/{id} — Delete endpoint
+POST /v1/webhooks/endpoints/{id}/test — Send test event
+
+Events: execution.started, execution.completed, execution.failed, execution.cancelled
+
+Webhook signature: HMAC-SHA256
+- Header X-Signature-Timestamp: unix timestamp
+- Header X-Signature: hex(HMAC-SHA256(secret, "{timestamp}.{body}"))
+- Max 5 retry attempts, 24h expiry, exponential backoff
+
+### API Keys
+
+POST /v1/api-keys/{id}/rotate — Rotate an API key (1h grace period for old key)
+Max 20 keys per organization
+
+### Balance
+
+GET /v1/balance — Get current balance (available, held, total)
+
+## Error Format
+
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable message",
+    "retryable": true/false,
+    "request_id": "req_...",
+    "details": [{"field": "...", "code": "...", "message": "..."}]
+  }
+}
+
+## Error Codes
+
+INPUT_VALIDATION_ERROR (400, not retryable)
+CONTENT_MODERATION_REJECTED (400, not retryable)
+FILE_NOT_FOUND (400, not retryable)
+FILE_FORMAT_UNSUPPORTED (400, not retryable)
+INSUFFICIENT_BALANCE (402, not retryable)
+RATE_LIMITED (429, retryable)
+MODEL_OVERLOADED (503, retryable)
+MODEL_UNAVAILABLE (503, retryable)
+GENERATION_TIMEOUT (504, retryable)
+GENERATION_FAILED (500, retryable)
+SERVICE_UNAVAILABLE (503, retryable)
+INTERNAL_ERROR (500, not retryable)
+
+## Rate Limiting
+
+Headers on every response:
+- X-RateLimit-Limit: max requests in window
+- X-RateLimit-Remaining: requests remaining
+- X-RateLimit-Reset: unix timestamp when window resets

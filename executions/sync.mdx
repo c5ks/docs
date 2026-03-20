@@ -1,0 +1,128 @@
+---
+title: Synchronous Executions
+description: Submit a request and get the result in a single HTTP response.
+---
+
+## Overview
+
+Synchronous executions return the result directly in the HTTP response. ModelRoute holds the connection open while the provider processes the request. Best for models that complete in under 30 seconds.
+
+## Request
+
+```bash
+curl -X POST https://api.modelroute.ai/v1/executions \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: sync-example-001" \
+  -d '{
+    "model": "flux-1.1-pro",
+    "input": {
+      "prompt": "A cyberpunk cityscape at night, neon reflections on wet streets",
+      "width": 1024,
+      "height": 768
+    }
+  }'
+```
+
+### Request body
+
+| Field | Type | Required | Description |
+|-|-|-|-|
+| `model` | string | Yes | Model slug (e.g., `flux-1.1-pro`, `stable-diffusion-xl`) |
+| `input` | object | Yes | Model-specific input parameters |
+| `webhook_url` | string | No | URL to receive completion webhook (optional for sync) |
+| `metadata` | object | No | Arbitrary key-value metadata attached to the execution |
+
+### Headers
+
+| Header | Required | Description |
+|-|-|-|
+| `Authorization` | Yes | `Bearer sk_your_api_key_here` |
+| `Content-Type` | Yes | `application/json` |
+| `Idempotency-Key` | Recommended | Unique key to prevent duplicate executions |
+
+## Response
+
+### Success (200 OK)
+
+```json
+{
+  "id": "exec_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "COMPLETED",
+  "model": "flux-1.1-pro",
+  "mode": "SYNC",
+  "idempotency_key": "sync-example-001",
+  "result": {
+    "file_id": "file_f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "content_type": "image/png",
+    "width": 1024,
+    "height": 768
+  },
+  "cost": "0.040",
+  "usage": {
+    "megapixels": 0.786
+  },
+  "latency_ms": 8420,
+  "created_at": "2026-03-20T10:30:00Z",
+  "completed_at": "2026-03-20T10:30:08Z"
+}
+```
+
+### Failure
+
+If the execution fails, you get the error inline:
+
+```json
+{
+  "id": "exec_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "FAILED",
+  "model": "flux-1.1-pro",
+  "mode": "SYNC",
+  "error": {
+    "code": "CONTENT_MODERATION_REJECTED",
+    "message": "Content was rejected by safety filters",
+    "retryable": false
+  },
+  "cost": "0.000",
+  "created_at": "2026-03-20T10:30:00Z"
+}
+```
+
+## Using file references in input
+
+If a model accepts images or files as input, upload them first and reference by file ID:
+
+```bash
+curl -X POST https://api.modelroute.ai/v1/executions \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "flux-1.1-pro",
+    "input": {
+      "prompt": "Make this photo look like a watercolor painting",
+      "image": "file_f47ac10b-58cc-4372-a567-0e02b2c3d479"
+    }
+  }'
+```
+
+See [Uploading Files](/files/uploading) for how to upload files and obtain file references.
+
+## Timeout behavior
+
+Synchronous executions have a server-side timeout. If the provider does not respond in time:
+
+- The execution transitions to `FAILED` with error code `GENERATION_TIMEOUT`
+- The balance hold is released
+- The response is returned with the error
+
+```json
+{
+  "error": {
+    "code": "GENERATION_TIMEOUT",
+    "message": "Generation timed out",
+    "retryable": true
+  }
+}
+```
+
+For long-running models, use [async executions](/executions/async) instead.

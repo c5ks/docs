@@ -1,0 +1,100 @@
+---
+title: Error Handling
+description: How ModelRoute returns errors and how to handle them.
+---
+
+## Error envelope
+
+Every error response uses a consistent JSON envelope:
+
+```json
+{
+  "error": {
+    "code": "INPUT_VALIDATION_ERROR",
+    "message": "Invalid input parameters",
+    "retryable": false,
+    "request_id": "req_a1b2c3d4",
+    "details": [
+      {
+        "field": "input.prompt",
+        "code": "REQUIRED",
+        "message": "prompt is required"
+      }
+    ]
+  }
+}
+```
+
+| Field | Type | Description |
+|-|-|-|
+| `code` | string | One of the 12 normalized error codes |
+| `message` | string | Human-readable description |
+| `retryable` | boolean | Whether retrying the same request may succeed |
+| `request_id` | string | Unique request identifier for support tickets |
+| `details` | array | Field-level validation errors (only for `INPUT_VALIDATION_ERROR`) |
+
+## Retry logic
+
+Check the `retryable` field before retrying:
+
+```python
+import requests
+import time
+
+def execute_with_retry(payload, max_retries=3):
+    for attempt in range(max_retries + 1):
+        response = requests.post(
+            "https://api.modelroute.ai/v1/executions",
+            headers={"Authorization": "Bearer sk_your_api_key_here"},
+            json=payload
+        )
+
+        if response.status_code == 200:
+            return response.json()
+
+        error = response.json().get("error", {})
+
+        # Don't retry non-retryable errors
+        if not error.get("retryable", False):
+            raise Exception(f"Non-retryable error: {error['code']} - {error['message']}")
+
+        # Exponential backoff
+        if attempt < max_retries:
+            wait = min(2 ** attempt, 30)
+            print(f"Retryable error ({error['code']}), waiting {wait}s...")
+            time.sleep(wait)
+
+    raise Exception("Max retries exceeded")
+```
+
+## Rate limit errors
+
+When rate limited, use the `X-RateLimit-Reset` header to determine when to retry:
+
+```python
+if response.status_code == 429:
+    reset_time = int(response.headers.get("X-RateLimit-Reset", 0))
+    wait_seconds = max(reset_time - int(time.time()), 1)
+    time.sleep(wait_seconds)
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Always check the error code, not the HTTP status">
+    Multiple error codes map to the same HTTP status (e.g., 400 can be INPUT_VALIDATION_ERROR, CONTENT_MODERATION_REJECTED, FILE_NOT_FOUND, or FILE_FORMAT_UNSUPPORTED). Use the `code` field for precise handling.
+  </Accordion>
+  <Accordion title="Use idempotency keys for retries">
+    When retrying failed requests, use the same idempotency key to prevent duplicate executions in case the original succeeded but the response was lost.
+  </Accordion>
+  <Accordion title="Log the request_id">
+    Include the `request_id` when contacting support. It allows us to trace the exact request through our systems.
+  </Accordion>
+  <Accordion title="Handle INSUFFICIENT_BALANCE proactively">
+    Check your balance before submitting large batches. Set up auto-topup in the dashboard to avoid interruptions.
+  </Accordion>
+</AccordionGroup>
+
+## Error code reference
+
+See the [full error code table](/errors/error-codes) for all 12 normalized error codes with HTTP statuses, retry guidance, and recommended actions.

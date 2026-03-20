@@ -1,0 +1,156 @@
+---
+title: Webhook Setup
+description: Register, manage, and test webhook endpoints.
+---
+
+## Register an endpoint
+
+Create a webhook endpoint by specifying a URL and the events you want to receive:
+
+```bash
+curl -X POST https://api.modelroute.ai/v1/webhooks/endpoints \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-app.com/webhooks/modelroute",
+    "description": "Production webhook endpoint",
+    "events": ["execution.completed", "execution.failed"]
+  }'
+```
+
+### Response
+
+```json
+{
+  "id": "wh_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "url": "https://your-app.com/webhooks/modelroute",
+  "description": "Production webhook endpoint",
+  "events": ["execution.completed", "execution.failed"],
+  "secret": "whsec_k8m2n4p6r8t0v2x4z6a8c0e2g4i6k8m2n4p6r8t0",
+  "is_active": true,
+  "created_at": "2026-03-20T10:00:00Z"
+}
+```
+
+<Warning>
+  The `secret` is only returned once at creation time. Store it securely — you need it to verify webhook signatures.
+</Warning>
+
+### Request body
+
+| Field | Type | Required | Description |
+|-|-|-|-|
+| `url` | string | Yes | HTTPS URL to receive webhook events |
+| `description` | string | No | Human-readable label |
+| `events` | string[] | No | Event types to receive. Empty array = all events. |
+| `headers` | object | No | Custom headers to include in webhook deliveries |
+
+## List endpoints
+
+```bash
+curl -X GET https://api.modelroute.ai/v1/webhooks/endpoints \
+  -H "Authorization: Bearer sk_your_api_key_here"
+```
+
+```json
+{
+  "endpoints": [
+    {
+      "id": "wh_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "url": "https://your-app.com/webhooks/modelroute",
+      "events": ["execution.completed", "execution.failed"],
+      "is_active": true,
+      "failure_count": 0,
+      "last_success": "2026-03-20T10:15:00Z"
+    }
+  ]
+}
+```
+
+## Update an endpoint
+
+```bash
+curl -X PATCH https://api.modelroute.ai/v1/webhooks/endpoints/wh_a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": ["execution.completed", "execution.failed", "execution.started"],
+    "description": "Updated production webhook"
+  }'
+```
+
+## Delete an endpoint
+
+```bash
+curl -X DELETE https://api.modelroute.ai/v1/webhooks/endpoints/wh_a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+  -H "Authorization: Bearer sk_your_api_key_here"
+```
+
+## Test an endpoint
+
+Send a test event to verify your endpoint is reachable and correctly processes webhooks:
+
+```bash
+curl -X POST https://api.modelroute.ai/v1/webhooks/endpoints/wh_a1b2c3d4-e5f6-7890-abcd-ef1234567890/test \
+  -H "Authorization: Bearer sk_your_api_key_here"
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "status_code": 200,
+  "response_time_ms": 145
+}
+```
+
+## Endpoint health
+
+ModelRoute tracks delivery health per endpoint:
+
+| Metric | Description |
+|-|-|
+| `failure_count` | Consecutive failed deliveries |
+| `last_success` | Timestamp of last successful delivery |
+| `last_failure` | Timestamp of last failed delivery |
+| `last_error` | Error message from last failure |
+| `is_active` | Whether the endpoint is active |
+
+An endpoint is automatically **deactivated** after 10 consecutive failures. Reactivate it by updating the endpoint:
+
+```bash
+curl -X PATCH https://api.modelroute.ai/v1/webhooks/endpoints/wh_a1b2c3d4.../  \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{"is_active": true}'
+```
+
+## Event filtering
+
+By default, an endpoint receives all events. Specify an `events` array to filter:
+
+```json
+{
+  "events": ["execution.completed", "execution.failed"]
+}
+```
+
+Valid events: `execution.started`, `execution.completed`, `execution.failed`, `execution.cancelled`.
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use HTTPS endpoints only">
+    Webhook URLs must use HTTPS. HTTP endpoints are rejected.
+  </Accordion>
+  <Accordion title="Respond quickly">
+    Return a 2xx status code within 30 seconds. Do heavy processing asynchronously after acknowledging receipt.
+  </Accordion>
+  <Accordion title="Handle duplicates">
+    Store processed event IDs and skip duplicates. Retries may deliver the same event more than once.
+  </Accordion>
+  <Accordion title="Verify signatures">
+    Always verify the HMAC-SHA256 signature before processing. See [Webhook Verification](/webhooks/verification).
+  </Accordion>
+</AccordionGroup>

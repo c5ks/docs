@@ -1,0 +1,200 @@
+---
+title: Error Code Reference
+description: Complete reference for all 12 normalized error codes.
+---
+
+## Normalized error codes
+
+ModelRoute maps all provider-specific errors into 12 deterministic error codes. Regardless of which provider executes your request, you always receive the same error taxonomy.
+
+| Code | HTTP Status | Retryable | Description |
+|-|-|-|-|
+| `INPUT_VALIDATION_ERROR` | 400 | No | Invalid input parameters. Check the `details` array for field-level errors. |
+| `CONTENT_MODERATION_REJECTED` | 400 | No | Content was rejected by safety filters. Modify your input. |
+| `FILE_NOT_FOUND` | 400 | No | Referenced file does not exist or has expired. Re-upload the file. |
+| `FILE_FORMAT_UNSUPPORTED` | 400 | No | File format not supported for this model. Check model documentation. |
+| `INSUFFICIENT_BALANCE` | 402 | No | Not enough balance. Top up your account at the dashboard. |
+| `RATE_LIMITED` | 429 | Yes | Rate limit exceeded. Wait for `X-RateLimit-Reset` and retry. |
+| `MODEL_OVERLOADED` | 503 | Yes | Model temporarily at capacity. Retry with exponential backoff. |
+| `MODEL_UNAVAILABLE` | 503 | Yes | Model temporarily unavailable. Retry shortly. |
+| `GENERATION_TIMEOUT` | 504 | Yes | Generation timed out. Retry or use async execution. |
+| `GENERATION_FAILED` | 500 | Yes | Generation failed at the provider level. Retry the request. |
+| `SERVICE_UNAVAILABLE` | 503 | Yes | ModelRoute platform temporarily unavailable. Retry shortly. |
+| `INTERNAL_ERROR` | 500 | No | An unexpected internal error. Contact support with the `request_id`. |
+
+## Detailed guidance
+
+### INPUT_VALIDATION_ERROR
+
+```json
+{
+  "error": {
+    "code": "INPUT_VALIDATION_ERROR",
+    "message": "Invalid input parameters",
+    "retryable": false,
+    "details": [
+      {
+        "field": "input.width",
+        "code": "OUT_OF_RANGE",
+        "message": "width must be between 256 and 2048"
+      }
+    ]
+  }
+}
+```
+
+**Action**: Fix the input based on the `details` array and resubmit.
+
+### CONTENT_MODERATION_REJECTED
+
+```json
+{
+  "error": {
+    "code": "CONTENT_MODERATION_REJECTED",
+    "message": "Content was rejected by safety filters",
+    "retryable": false
+  }
+}
+```
+
+**Action**: Review and modify your input content. This error is deterministic — the same input will always be rejected.
+
+### FILE_NOT_FOUND
+
+```json
+{
+  "error": {
+    "code": "FILE_NOT_FOUND",
+    "message": "Referenced file does not exist or has expired",
+    "retryable": false
+  }
+}
+```
+
+**Action**: Verify the file reference is correct. If the upload was incomplete, re-upload and use the new file reference.
+
+### FILE_FORMAT_UNSUPPORTED
+
+```json
+{
+  "error": {
+    "code": "FILE_FORMAT_UNSUPPORTED",
+    "message": "File format not supported for this model",
+    "retryable": false
+  }
+}
+```
+
+**Action**: Convert the file to a supported format. Check the model's documentation for accepted file types.
+
+### INSUFFICIENT_BALANCE
+
+```json
+{
+  "error": {
+    "code": "INSUFFICIENT_BALANCE",
+    "message": "Insufficient balance for this operation",
+    "retryable": false
+  }
+}
+```
+
+**Action**: Top up your balance at [app.modelroute.ai](https://app.modelroute.ai). Consider enabling auto-topup to prevent interruptions.
+
+### RATE_LIMITED
+
+```json
+{
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Rate limit exceeded. Please retry shortly",
+    "retryable": true
+  }
+}
+```
+
+**Action**: Check the `X-RateLimit-Reset` response header for the reset timestamp. Implement exponential backoff.
+
+### MODEL_OVERLOADED
+
+```json
+{
+  "error": {
+    "code": "MODEL_OVERLOADED",
+    "message": "Model temporarily at capacity. Please retry shortly",
+    "retryable": true
+  }
+}
+```
+
+**Action**: The model's providers are temporarily at capacity. Retry with exponential backoff. ModelRoute may automatically route to an alternative provider.
+
+### MODEL_UNAVAILABLE
+
+```json
+{
+  "error": {
+    "code": "MODEL_UNAVAILABLE",
+    "message": "Model temporarily unavailable",
+    "retryable": true
+  }
+}
+```
+
+**Action**: All providers for this model are temporarily down. Retry after a short delay.
+
+### GENERATION_TIMEOUT
+
+```json
+{
+  "error": {
+    "code": "GENERATION_TIMEOUT",
+    "message": "Generation timed out",
+    "retryable": true
+  }
+}
+```
+
+**Action**: The provider took too long. Retry the request. For consistently slow models, use [async executions](/executions/async).
+
+### GENERATION_FAILED
+
+```json
+{
+  "error": {
+    "code": "GENERATION_FAILED",
+    "message": "Generation failed. Please retry",
+    "retryable": true
+  }
+}
+```
+
+**Action**: The provider encountered an error during generation. Retry — ModelRoute may route to a different provider.
+
+### SERVICE_UNAVAILABLE
+
+```json
+{
+  "error": {
+    "code": "SERVICE_UNAVAILABLE",
+    "message": "Service temporarily unavailable",
+    "retryable": true
+  }
+}
+```
+
+**Action**: The ModelRoute platform is experiencing issues. Check [status.modelroute.ai](https://status.modelroute.ai) and retry.
+
+### INTERNAL_ERROR
+
+```json
+{
+  "error": {
+    "code": "INTERNAL_ERROR",
+    "message": "An internal error occurred",
+    "retryable": false
+  }
+}
+```
+
+**Action**: An unexpected error on our end. Contact [support@modelroute.ai](mailto:support@modelroute.ai) with the `request_id` from the error response.

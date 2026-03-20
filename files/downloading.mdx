@@ -1,0 +1,138 @@
+---
+title: Downloading Files
+description: Download execution results and generated files from ModelRoute.
+---
+
+## Getting the file reference
+
+When an execution completes, the result contains file references for any generated files:
+
+```bash
+curl -X GET https://api.modelroute.ai/v1/executions/{execution_id} \
+  -H "Authorization: Bearer sk_your_api_key_here"
+```
+
+```json
+{
+  "id": "exec_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "COMPLETED",
+  "result": {
+    "file_id": "file_f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "content_type": "image/png",
+    "width": 1024,
+    "height": 768
+  }
+}
+```
+
+## Downloading a file
+
+Use the file download endpoint to get a presigned download URL or download directly:
+
+<CodeGroup>
+```bash curl (direct download)
+curl -X GET https://api.modelroute.ai/v1/files/file_f47ac10b-58cc-4372-a567-0e02b2c3d479/download \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -o result.png
+```
+
+```bash curl (get presigned URL)
+curl -X GET https://api.modelroute.ai/v1/files/file_f47ac10b-58cc-4372-a567-0e02b2c3d479/url \
+  -H "Authorization: Bearer sk_your_api_key_here"
+```
+
+```python Python
+import requests
+
+API_KEY = "sk_your_api_key_here"
+file_id = "file_f47ac10b-58cc-4372-a567-0e02b2c3d479"
+
+# Get presigned download URL
+response = requests.get(
+    f"https://api.modelroute.ai/v1/files/{file_id}/url",
+    headers={"Authorization": f"Bearer {API_KEY}"}
+)
+download_url = response.json()["url"]
+
+# Download the file
+file_data = requests.get(download_url)
+with open("result.png", "wb") as f:
+    f.write(file_data.content)
+```
+
+```typescript TypeScript
+const fileId = "file_f47ac10b-58cc-4372-a567-0e02b2c3d479";
+
+// Get presigned download URL
+const urlResponse = await fetch(
+  `https://api.modelroute.ai/v1/files/${fileId}/url`,
+  { headers: { "Authorization": "Bearer sk_your_api_key_here" } }
+);
+const { url } = await urlResponse.json();
+
+// Download the file
+const fileResponse = await fetch(url);
+const blob = await fileResponse.blob();
+```
+</CodeGroup>
+
+### Presigned URL response
+
+```json
+{
+  "url": "https://storage.modelroute.ai/files/file_f47ac10b...?X-Amz-Signature=...",
+  "expires_at": "2026-03-20T11:30:00Z",
+  "content_type": "image/png",
+  "size_bytes": 1048576
+}
+```
+
+| Field | Description |
+|-|-|
+| `url` | Presigned GET URL. Valid for 1 hour. |
+| `expires_at` | When the download URL expires |
+| `content_type` | MIME type of the file |
+| `size_bytes` | File size in bytes |
+
+## Complete end-to-end example
+
+Run an execution and download the result:
+
+```python
+import requests
+
+API_KEY = "sk_your_api_key_here"
+BASE = "https://api.modelroute.ai/v1"
+HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+
+# 1. Run execution
+execution = requests.post(
+    f"{BASE}/executions",
+    headers=HEADERS,
+    json={
+        "model": "flux-1.1-pro",
+        "input": {"prompt": "A mountain landscape at sunset"}
+    }
+).json()
+
+# 2. Get the file reference from the result
+file_id = execution["result"]["file_id"]
+
+# 3. Download
+download = requests.get(
+    f"{BASE}/files/{file_id}/download",
+    headers=HEADERS
+)
+
+with open("landscape.png", "wb") as f:
+    f.write(download.content)
+
+print(f"Downloaded {len(download.content)} bytes")
+```
+
+## Error handling
+
+| Error code | Cause |
+|-|-|
+| `FILE_NOT_FOUND` | The file reference does not exist or belongs to a different organization |
+| `UNAUTHORIZED` | Invalid or missing API key |

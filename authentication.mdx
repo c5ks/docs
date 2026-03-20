@@ -1,0 +1,140 @@
+---
+title: Authentication
+description: How to authenticate with the ModelRoute API using API keys.
+---
+
+## API key format
+
+ModelRoute API keys follow the format:
+
+```
+sk_<64 hex chars>_<8 hex CRC32 checksum>
+```
+
+Total length: **76 characters**. The `sk_` prefix identifies it as a secret key. The trailing 8-character CRC32 checksum allows client-side format validation before making a network request.
+
+Example:
+
+```
+sk_a1b2c3d4e5f6789012345678901234567890123456789012345678901234_1a2b3c4d
+```
+
+## Using your API key
+
+Include your key in the `Authorization` header as a Bearer token on every request:
+
+<CodeGroup>
+```bash curl
+curl -X GET https://api.modelroute.ai/v1/executions \
+  -H "Authorization: Bearer sk_your_api_key_here"
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    "https://api.modelroute.ai/v1/executions",
+    headers={"Authorization": "Bearer sk_your_api_key_here"}
+)
+```
+
+```typescript TypeScript
+const response = await fetch("https://api.modelroute.ai/v1/executions", {
+  headers: {
+    "Authorization": "Bearer sk_your_api_key_here"
+  }
+});
+```
+
+```go Go
+req, _ := http.NewRequest("GET", "https://api.modelroute.ai/v1/executions", nil)
+req.Header.Set("Authorization", "Bearer sk_your_api_key_here")
+resp, err := http.DefaultClient.Do(req)
+```
+</CodeGroup>
+
+## Creating API keys
+
+1. Log in to [app.modelroute.ai](https://app.modelroute.ai)
+2. Navigate to **Settings > API Keys**
+3. Click **Create Key**
+4. Choose a permission level and label
+5. Copy the full key — **it is shown only once**
+
+<Warning>
+  You can create a maximum of **20 API keys** per organization. Revoke unused keys to free up slots.
+</Warning>
+
+## Permission levels
+
+| Level | Capabilities |
+|-|-|
+| **Full access** | Executions, files, webhooks, billing, key management |
+| **Execution only** | Executions and file operations only. Cannot manage keys, webhooks, or billing. |
+
+Use execution-only keys in production applications. Reserve full-access keys for admin scripts and automation.
+
+## Key rotation
+
+Rotate a key to generate a new secret while keeping the same key ID and permissions:
+
+```bash
+curl -X POST https://api.modelroute.ai/v1/api-keys/{key_id}/rotate \
+  -H "Authorization: Bearer sk_your_admin_key_here"
+```
+
+Response:
+
+```json
+{
+  "id": "key_a1b2c3d4",
+  "new_key": "sk_new_key_value_here..._crc32hex",
+  "previous_key_valid_until": "2026-03-20T11:00:00Z"
+}
+```
+
+The old key remains valid for **1 hour** after rotation to allow zero-downtime migration.
+
+## Rate limiting
+
+Every API response includes rate limit headers:
+
+| Header | Description |
+|-|-|
+| `X-RateLimit-Limit` | Maximum requests allowed in the current window |
+| `X-RateLimit-Remaining` | Requests remaining in the current window |
+| `X-RateLimit-Reset` | Unix timestamp when the window resets |
+
+When you exceed the rate limit, the API returns `429 Too Many Requests` with the `RATE_LIMITED` error code:
+
+```json
+{
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Rate limit exceeded. Please retry shortly",
+    "retryable": true
+  }
+}
+```
+
+Use the `X-RateLimit-Reset` header to determine when to retry. Implement exponential backoff for production systems.
+
+## Security best practices
+
+<AccordionGroup>
+  <Accordion title="Never expose keys in client-side code">
+    API keys are server-side secrets. Never embed them in JavaScript bundles, mobile apps, or public repositories. Use a backend proxy to make ModelRoute API calls.
+  </Accordion>
+  <Accordion title="Use environment variables">
+    Store keys in environment variables or a secrets manager (e.g., AWS Secrets Manager, GCP Secret Manager). Never hardcode keys in source files.
+  </Accordion>
+  <Accordion title="Scope keys to minimum permissions">
+    Use execution-only keys for services that only run executions. Keep full-access keys for admin operations only.
+  </Accordion>
+  <Accordion title="Rotate keys regularly">
+    Rotate keys every 90 days or immediately if a key is compromised. The 1-hour grace period on rotation ensures zero downtime.
+  </Accordion>
+  <Accordion title="Revoke compromised keys immediately">
+    If a key is leaked, revoke it from the dashboard immediately. Revocation is instant — the key stops working on the next request.
+  </Accordion>
+</AccordionGroup>

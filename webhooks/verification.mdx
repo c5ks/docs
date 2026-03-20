@@ -1,0 +1,230 @@
+---
+title: Signature Verification
+description: Verify HMAC-SHA256 webhook signatures to ensure authenticity.
+---
+
+## How signatures work
+
+Every webhook delivery includes two headers for signature verification:
+
+| Header | Description |
+|-|-|
+| `X-Signature-Timestamp` | Unix timestamp (seconds) when the signature was computed |
+| `X-Signature` | Hex-encoded HMAC-SHA256 of the signing payload |
+
+The signing payload is constructed as:
+
+```
+{timestamp}.{raw_request_body}
+```
+
+The HMAC is computed using your webhook endpoint secret as the key.
+
+## Verification steps
+
+1. Extract `X-Signature-Timestamp` and `X-Signature` from the request headers
+2. Construct the signing payload: `{timestamp}.{raw_body}`
+3. Compute HMAC-SHA256 of the signing payload using your webhook secret
+4. Compare the computed signature with `X-Signature` using constant-time comparison
+5. Optionally, reject requests with a timestamp more than 5 minutes old to prevent replay attacks
+
+## Code examples
+
+<CodeGroup>
+```python Python
+import hmac
+import hashlib
+import time
+
+def verify_webhook(payload: bytes, secret: str, signature: str, timestamp: str) -> bool:
+    """Verify a ModelRoute webhook signature."""
+    # Check timestamp to prevent replay attacks (5 minute tolerance)
+    current_time = int(time.time())
+    request_time = int(timestamp)
+    if abs(current_time - request_time) > 300:
+        return False
+
+    # Construct signing payload
+    sign_payload = f"{timestamp}.{payload.decode('utf-8')}"
+
+    # Compute expected signature
+    expected = hmac.new(
+        secret.encode("utf-8"),
+        sign_payload.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+
+    # Constant-time comparison
+    return hmac.compare_digest(expected, signature)
+
+
+# Flask example
+from flask import Flask, request, abort
+
+app = Flask(__name__)
+WEBHOOK_SECRET = "whsec_your_secret_here"
+
+@app.route("/webhooks/modelroute", methods=["POST"])
+def handle_webhook():
+    signature = request.headers.get("X-Signature")
+    timestamp = request.headers.get("X-Signature-Timestamp")
+    payload = request.get_data()
+
+    if not verify_webhook(payload, WEBHOOK_SECRET, signature, timestamp):
+        abort(401)
+
+    event = request.get_json()
+    print(f"Received {event['event_type']} for execution {event['execution_id']}")
+
+    # Process the event...
+    return "", 200
+```
+
+```typescript TypeScript
+import crypto from "crypto";
+
+function verifyWebhook(
+  payload: string,
+  secret: string,
+  signature: string,
+  timestamp: string
+): boolean {
+  // Check timestamp to prevent replay attacks (5 minute tolerance)
+  const currentTime = Math.floor(Date.now() / 1000);
+  const requestTime = parseInt(timestamp, 10);
+  if (Math.abs(currentTime - requestTime) > 300) {
+    return false;
+  }
+
+  // Construct signing payload
+  const signPayload = `${timestamp}.${payload}`;
+
+  // Compute expected signature
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(signPayload)
+    .digest("hex");
+
+  // Constant-time comparison
+  return crypto.timingSafeEqual(
+    Buffer.from(expected, "hex"),
+    Buffer.from(signature, "hex")
+  );
+}
+
+// Express example
+import express from "express";
+
+const app = express();
+const WEBHOOK_SECRET = "whsec_your_secret_here";
+
+app.post(
+  "/webhooks/modelroute",
+  express.raw({ type: "application/json" }),
+  (req, res) => {
+    const signature = req.headers["x-signature"] as string;
+    const timestamp = req.headers["x-signature-timestamp"] as string;
+    const payload = req.body.toString();
+
+    if (!verifyWebhook(payload, WEBHOOK_SECRET, signature, timestamp)) {
+      return res.status(401).send("Invalid signature");
+    }
+
+    const event = JSON.parse(payload);
+    console.log(`Received ${event.event_type} for execution ${event.execution_id}`);
+
+    // Process the event...
+    res.status(200).send();
+  }
+);
+```
+
+```go Go
+package main
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"math"
+	"net/http"
+	"strconv"
+	"time"
+)
+
+func verifyWebhook(payload []byte, secret, signature, timestamp string) bool {
+	// Check timestamp to prevent replay attacks (5 minute tolerance)
+	ts, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil {
+		return false
+	}
+	if math.Abs(float64(time.Now().Unix()-ts)) > 300 {
+		return false
+	}
+
+	// Construct signing payload
+	signPayload := fmt.Sprintf("%s.%s", timestamp, string(payload))
+
+	// Compute expected signature
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(signPayload))
+	expected := hex.EncodeToString(mac.Sum(nil))
+
+	// Constant-time comparison
+	return hmac.Equal([]byte(expected), []byte(signature))
+}
+
+func webhookHandler(w http.ResponseWriter, r *http.Request) {
+	signature := r.Header.Get("X-Signature")
+	timestamp := r.Header.Get("X-Signature-Timestamp")
+
+	payload, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	secret := "whsec_your_secret_here"
+	if !verifyWebhook(payload, secret, signature, timestamp) {
+		http.Error(w, "Invalid signature", http.StatusUnauthorized)
+		return
+	}
+
+	// Process the event...
+	w.WriteHeader(http.StatusOK)
+}
+```
+
+```bash curl (manual verification)
+# Extract the signature components
+TIMESTAMP=$(echo "$HEADERS" | grep "X-Signature-Timestamp" | cut -d: -f2 | tr -d ' ')
+SIGNATURE=$(echo "$HEADERS" | grep "X-Signature" | cut -d: -f2 | tr -d ' ')
+
+# Compute expected signature
+SIGN_PAYLOAD="${TIMESTAMP}.${BODY}"
+EXPECTED=$(echo -n "$SIGN_PAYLOAD" | openssl dgst -sha256 -hmac "whsec_your_secret_here" | cut -d' ' -f2)
+
+# Compare
+if [ "$EXPECTED" = "$SIGNATURE" ]; then
+  echo "Signature valid"
+else
+  echo "Signature invalid"
+fi
+```
+</CodeGroup>
+
+## Common mistakes
+
+<AccordionGroup>
+  <Accordion title="Parsing the body before verification">
+    Always verify the signature against the **raw request body**, not a parsed-and-re-serialized version. JSON serialization may reorder keys or change formatting, producing a different signature.
+  </Accordion>
+  <Accordion title="Not using constant-time comparison">
+    Use `hmac.compare_digest` (Python), `crypto.timingSafeEqual` (Node.js), or `hmac.Equal` (Go). Regular string comparison (`==`) is vulnerable to timing attacks.
+  </Accordion>
+  <Accordion title="Ignoring the timestamp">
+    Without timestamp validation, an attacker who intercepts a valid webhook can replay it indefinitely. Reject timestamps older than 5 minutes.
+  </Accordion>
+</AccordionGroup>

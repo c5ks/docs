@@ -1,0 +1,152 @@
+---
+title: Polling for Results
+description: Check execution status by polling. Great for testing — use webhooks for production.
+---
+
+## When to use polling
+
+Polling is the simplest way to get execution results. Call `GET /v1/executions/{id}` in a loop until the status reaches a terminal state.
+
+<Warning>
+**Polling is rate-limited** and intended for testing, prototyping, and small-scale applications where you want to validate your idea quickly. For production applications at scale, [use webhooks](/executions/webhooks) instead — they deliver results instantly with zero wasted API calls and no rate limit concerns.
+</Warning>
+
+## Basic polling loop
+
+<CodeGroup>
+
+```python Python
+import time
+import requests
+
+API_KEY = "sk_your_api_key_here"
+EXECUTION_ID = "exec_a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+while True:
+    response = requests.get(
+        f"https://api.modelroute.ai/v1/executions/{EXECUTION_ID}",
+        headers={"Authorization": f"Bearer {API_KEY}"}
+    )
+    execution = response.json()
+    status = execution["status"]
+
+    if status in ("COMPLETED", "FAILED", "CANCELLED", "EXPIRED"):
+        break
+
+    # Respect rate limits — check X-RateLimit-Remaining header
+    time.sleep(2)
+
+if status == "COMPLETED":
+    # Fetch the result
+    result = requests.get(
+        f"https://api.modelroute.ai/v1/executions/{EXECUTION_ID}/result",
+        headers={"Authorization": f"Bearer {API_KEY}"}
+    ).json()
+    print(result)
+elif status == "FAILED":
+    print(f"Error: {execution['error']['code']} — {execution['error']['message']}")
+```
+
+```typescript TypeScript
+const API_KEY = "sk_your_api_key_here";
+const EXECUTION_ID = "exec_a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+
+async function waitForResult() {
+  while (true) {
+    const res = await fetch(
+      `https://api.modelroute.ai/v1/executions/${EXECUTION_ID}`,
+      { headers: { Authorization: `Bearer ${API_KEY}` } }
+    );
+    const execution = await res.json();
+
+    if (["COMPLETED", "FAILED", "CANCELLED", "EXPIRED"].includes(execution.status)) {
+      if (execution.status === "COMPLETED") {
+        const result = await fetch(
+          `https://api.modelroute.ai/v1/executions/${EXECUTION_ID}/result`,
+          { headers: { Authorization: `Bearer ${API_KEY}` } }
+        );
+        return await result.json();
+      }
+      throw new Error(`${execution.error.code}: ${execution.error.message}`);
+    }
+
+    await new Promise(r => setTimeout(r, 2000));
+  }
+}
+```
+
+```bash cURL
+# Poll until complete
+while true; do
+  STATUS=$(curl -s https://api.modelroute.ai/v1/executions/$EXECUTION_ID \
+    -H "Authorization: Bearer $API_KEY" | jq -r '.status')
+
+  echo "Status: $STATUS"
+
+  if [ "$STATUS" = "COMPLETED" ] || [ "$STATUS" = "FAILED" ]; then
+    break
+  fi
+
+  sleep 2
+done
+
+# Fetch result
+curl -s https://api.modelroute.ai/v1/executions/$EXECUTION_ID/result \
+  -H "Authorization: Bearer $API_KEY" | jq
+```
+
+</CodeGroup>
+
+## Rate limit headers
+
+Every response includes rate limit information:
+
+```
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 57
+X-RateLimit-Reset: 1710924600
+```
+
+If you hit the limit, you'll receive a `429 Too Many Requests` with a `Retry-After` header telling you how many seconds to wait.
+
+## Recommended polling interval
+
+| Use case | Interval | Notes |
+|-|-|-|
+| Testing / dev | 2 seconds | Fine for a few concurrent executions |
+| Small app (< 100 executions/day) | 3-5 seconds | Stay well within rate limits |
+| Production (> 100 executions/day) | **Use webhooks** | Polling doesn't scale — switch to [webhooks](/executions/webhooks) |
+
+## Fetching the result
+
+Once status is `COMPLETED`, fetch the full result:
+
+```bash
+curl -X GET https://api.modelroute.ai/v1/executions/{execution_id}/result \
+  -H "Authorization: Bearer sk_your_api_key_here"
+```
+
+```json
+{
+  "execution_id": "exec_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "COMPLETED",
+  "output": {
+    "images": [
+      {
+        "file_id": "file_f47ac10b-58cc-4372-a567-0e02b2c3d479",
+        "format": "png",
+        "width": 1024,
+        "height": 1024
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 12,
+    "output_tokens": 0
+  },
+  "cost": "0.040",
+  "latency_ms": 8420
+}
+```
+
+Download any files using the [file download flow](/files/downloading).

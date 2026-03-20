@@ -1,121 +1,78 @@
 ---
-title: Execution Lifecycle
-description: Understand how executions move through states, how costs are handled, and how to use idempotency keys.
+title: How Executions Work
+description: Every execution is asynchronous. Submit your request, receive a tracking ID, get results via webhook or polling.
 ---
 
-## What is an execution?
+## Async-first by design
 
-An execution is a single AI model run. You submit input (a prompt, an image, audio), ModelRoute routes it to a provider, and returns the output. Every execution has a unique ID and follows a defined lifecycle.
+Every ModelRoute execution is **asynchronous**. When you submit a request, you immediately receive a `202 Accepted` response with an execution ID. The actual AI processing happens in the background.
+
+This is an intentional design decision, not a limitation:
+
+- **Resilience** — your request is durably tracked even if a provider takes minutes to respond
+- **Scalability** — no HTTP connections held open during long-running generations
+- **Reliability** — automatic retries, failover, and timeout handling happen behind the scenes
+- **Consistency** — one integration pattern works for every model, from sub-second text to minutes-long video
+
+<Info>
+We don't expose synchronous endpoints. Many AI operations (video generation, image editing, complex reasoning) take 10 seconds to 5 minutes. Holding HTTP connections open for that long is fragile and doesn't scale. The async pattern gives you a robust integration from day one.
+</Info>
+
+## The execution flow
+
+```mermaid
+sequenceDiagram
+    participant You
+    participant ModelRoute
+    participant Provider
+
+    You->>ModelRoute: POST /v1/executions
+    ModelRoute-->>You: 202 Accepted (execution_id)
+    ModelRoute->>Provider: Execute in background
+    Provider-->>ModelRoute: Result
+    ModelRoute-->>You: Webhook (execution.completed)
+    You->>ModelRoute: GET /v1/executions/{id}/result
+    ModelRoute-->>You: Result with file references
+```
 
 ## Execution states
 
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING
-    PENDING --> PROCESSING
-    PENDING --> CANCELLED
-    PENDING --> EXPIRED
-    PROCESSING --> AWAITING_WEBHOOK
-    PROCESSING --> COMPLETED
-    PROCESSING --> FAILED
-    PROCESSING --> CANCELLED
-    AWAITING_WEBHOOK --> COMPLETED
-    AWAITING_WEBHOOK --> FAILED
-    AWAITING_WEBHOOK --> CANCELLED
-    AWAITING_WEBHOOK --> EXPIRED
-    COMPLETED --> [*]
-    FAILED --> [*]
-    CANCELLED --> [*]
-    EXPIRED --> [*]
-```
-
-| Status | Description |
+| Status | What's happening |
 |-|-|
-| `PENDING` | Request received, validated, balance hold placed. Waiting for provider dispatch. |
-| `PROCESSING` | Dispatched to a provider. Execution in progress. |
-| `AWAITING_WEBHOOK` | Async execution sent to provider. Waiting for provider callback. |
-| `COMPLETED` | Execution finished successfully. Result available. |
-| `FAILED` | Execution failed. Error details available in the response. |
-| `CANCELLED` | Cancelled by user or system. Balance hold released. |
+| `PENDING` | Request received, balance hold placed. Queued for provider dispatch. |
+| `PROCESSING` | Dispatched to provider. Execution in progress. |
+| `AWAITING_WEBHOOK` | Sent to provider. Waiting for provider to call back with results. |
+| `COMPLETED` | Done. Result available for download. |
+| `FAILED` | Failed. Normalized error code tells you exactly what went wrong. |
+| `CANCELLED` | Cancelled by you. Balance hold released. |
 | `EXPIRED` | Timed out. Balance hold released. |
 
-Terminal states: `COMPLETED`, `FAILED`, `CANCELLED`, `EXPIRED`. No further transitions occur.
+Once an execution reaches a terminal state (`COMPLETED`, `FAILED`, `CANCELLED`, `EXPIRED`), it never changes again.
 
-## Execution modes
+## Getting results: webhook vs polling
 
-| Mode | Behavior |
-|-|-|
-| `SYNC` | Provider returns the result in the same HTTP response. Best for fast models (< 30s). |
-| `ASYNC` | Provider processes in the background. Result delivered via webhook or polling. Used for long-running models (image/video generation). |
-| `STREAMING` | Provider streams partial results via Server-Sent Events (SSE). Used for text generation. |
+You have two options for receiving results:
 
-ModelRoute selects the execution mode automatically based on the model's capabilities.
+| Method | Best for | How |
+|-|-|-|
+| **Webhooks** (recommended) | Production applications | Register a webhook endpoint, receive `execution.completed` events automatically |
+| **Polling** | Testing, prototyping, small-scale apps | Call `GET /v1/executions/{id}` until `status` is terminal |
 
-## Cost estimation and balance holds
+<Warning>
+**Polling is rate-limited.** It works well for testing and validating your idea quickly, but for production workloads at scale, webhooks are the way to go. Webhooks give you instant delivery with zero wasted API calls.
+</Warning>
+
+## Cost and balance holds
 
 Before dispatching to a provider, ModelRoute:
 
-1. **Estimates the cost** based on the model's pricing and your input parameters
-2. **Places a balance hold** for the estimated amount
-3. On `COMPLETED`: settles the hold to the actual cost (which may differ from the estimate)
-4. On `FAILED` / `CANCELLED` / `EXPIRED`: releases the hold entirely
+1. **Estimates the cost** based on the model's pricing
+2. **Places a balance hold** (estimate × 1.2 margin buffer, minimum $0.01)
+3. On success → settles the hold to actual cost
+4. On failure → releases the hold entirely (you're not charged)
 
-```bash
-# Check your balance after an execution
-curl -X GET https://api.modelroute.ai/v1/balance \
-  -H "Authorization: Bearer sk_your_api_key_here"
-```
+## Idempotency
 
-```json
-{
-  "available": "142.50",
-  "held": "0.04",
-  "total": "142.54"
-}
-```
+Every execution requires an `idempotency_key`. If you submit the same key twice, you get the original result back — no duplicate charges, no duplicate processing.
 
-## Idempotency keys
-
-Include an `Idempotency-Key` header to prevent duplicate executions. If you submit the same idempotency key twice, ModelRoute returns the original execution result instead of creating a new one.
-
-```bash
-curl -X POST https://api.modelroute.ai/v1/executions \
-  -H "Authorization: Bearer sk_your_api_key_here" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: order-12345-image-gen" \
-  -d '{
-    "model": "flux-1.1-pro",
-    "input": {
-      "prompt": "A red car"
-    }
-  }'
-```
-
-<Info>
-  Idempotency keys are scoped to your organization. Use deterministic, business-meaningful keys (e.g., `order-{id}-step-{n}`) rather than random UUIDs.
-</Info>
-
-## Retrieving executions
-
-Fetch an execution by ID at any point to check its current state:
-
-```bash
-curl -X GET https://api.modelroute.ai/v1/executions/{execution_id} \
-  -H "Authorization: Bearer sk_your_api_key_here"
-```
-
-```json
-{
-  "id": "exec_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "status": "COMPLETED",
-  "model": "flux-1.1-pro",
-  "mode": "SYNC",
-  "cost": "0.040",
-  "latency_ms": 8420,
-  "result": {
-    "file_id": "file_f47ac10b-58cc-4372-a567-0e02b2c3d479"
-  },
-  "created_at": "2026-03-20T10:30:00Z",
-  "completed_at": "2026-03-20T10:30:08Z"
-}
-```
+Use deterministic, business-meaningful keys like `order-{id}-step-{n}` rather than random UUIDs.

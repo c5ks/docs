@@ -1,52 +1,65 @@
 ---
 title: Introduction
-description: ModelRoute is a provider-opaque AI execution marketplace. Send canonical input, get canonical output — never worry about which provider runs it.
+description: ModelRoute is a provider-opaque AI execution marketplace. One API, hundreds of models, zero provider lock-in.
 ---
 
 ## What is ModelRoute?
 
-ModelRoute is an AI model execution marketplace. You submit a request with a model slug and canonical input. ModelRoute routes it to the best available provider, executes it, and returns a canonical response. You never see or interact with the underlying provider.
+ModelRoute is an AI model execution platform built for builders. You submit a request with a model slug and input. ModelRoute routes it to the best available provider, executes it, and returns a canonical response. You never see or interact with the underlying provider.
 
-## Why use ModelRoute?
+Whether you're a solo developer validating an idea, a startup scaling to millions of users, or an enterprise building mission-critical AI pipelines — ModelRoute gives you a single, reliable API that just works.
+
+## Why ModelRoute?
 
 <CardGroup cols={2}>
-  <Card title="Provider Abstraction" icon="shuffle">
-    One API for hundreds of models. ModelRoute handles provider selection, authentication, and format translation.
+  <Card title="One API, Hundreds of Models" icon="shuffle">
+    No more managing provider SDKs, API keys, and response formats. One integration handles image generation, video, audio, text — across every provider.
   </Card>
-  <Card title="Normalized Errors" icon="shield-check">
-    Every provider error is classified into 12 deterministic error codes. No more parsing provider-specific error formats.
+  <Card title="Async-First, Built to Scale" icon="bolt">
+    Every execution is asynchronous. Submit your request, get a tracking ID, receive results via webhook. No fragile HTTP connections, no timeouts, no surprises.
   </Card>
-  <Card title="File Isolation" icon="lock">
-    Files are uploaded to ModelRoute, not to providers. Providers never see your raw files — ModelRoute handles secure transfer.
+  <Card title="12 Deterministic Error Codes" icon="shield-check">
+    Every provider error is classified into one of 12 normalized codes with a retryable flag. No more parsing provider-specific error formats. Your error handling code works across every model.
   </Card>
-  <Card title="Government-Grade Reliability" icon="building-columns">
-    Built for mission-critical workloads. Automatic failover, retry logic, and multi-provider redundancy.
+  <Card title="Complete File Isolation" icon="lock">
+    Your files are never exposed to providers. Upload to ModelRoute, reference by ID, download results by ID. Provider CDN URLs are never visible to your application.
   </Card>
 </CardGroup>
 
 ## How it works
 
 <Steps>
-  <Step title="Send a request">
-    POST your execution request with a model slug and input. ModelRoute validates, estimates cost, and places a balance hold.
+  <Step title="Submit your request">
+    POST an execution with a model slug and input. ModelRoute validates your request, estimates cost, and places a balance hold — all in milliseconds. You receive a `202 Accepted` with an execution ID.
   </Step>
-  <Step title="ModelRoute routes and executes">
-    The platform selects the best available provider based on cost, latency, and availability. Your request is translated into the provider's format and executed.
+  <Step title="ModelRoute handles the rest">
+    The platform selects the best available provider, translates your input into the provider's format, executes it, and handles retries and failover automatically.
   </Step>
-  <Step title="Get canonical output">
-    The provider response is normalized into ModelRoute's canonical format and returned. If the provider fails, ModelRoute retries on an alternative provider automatically.
+  <Step title="Receive your result">
+    Get notified via webhook when your execution completes. Or poll for status while testing. Either way, the result is in ModelRoute's canonical format — consistent across every provider.
   </Step>
 </Steps>
+
+## Built for builders
+
+We know that many builders today come from non-technical backgrounds — and that's great. ModelRoute is designed to be a point-and-shoot solution: robust, resilient, and reliable from day one.
+
+No need to understand provider APIs, manage rate limits across vendors, or build retry logic. ModelRoute handles the infrastructure so you can focus on your product.
+
+**For testing and small apps**: use polling to check execution status. It's the simplest path from idea to working prototype.
+
+**For production at scale**: set up webhooks once and forget about it. Results are pushed to your endpoint the moment they're ready — no rate limits, no wasted API calls, no dropped results.
 
 ## Key concepts
 
 | Concept | Description |
 |-|-|
-| **Execution** | A single AI model run. Has a lifecycle: PENDING, PROCESSING, COMPLETED, FAILED. |
+| **Execution** | A single AI model run. Lifecycle: PENDING → PROCESSING → COMPLETED or FAILED. |
 | **Model slug** | A canonical identifier for a model (e.g., `flux-1.1-pro`). Provider-agnostic. |
-| **File reference** | A `file_<uuid>` identifier for uploaded files. Used in execution inputs and outputs. |
-| **Balance hold** | A cost estimate locked before execution. Settled to actual cost on completion, released on failure. |
+| **File reference** | A `file_<uuid>` identifier for uploaded files. Used in inputs and outputs. |
+| **Balance hold** | Cost estimate locked before execution. Settled on completion, released on failure. |
 | **Idempotency key** | A unique key to prevent duplicate executions. Same key = same result. |
+| **Webhook** | Your endpoint that receives execution results automatically. |
 
 ## Next steps
 
@@ -55,6 +68,6 @@ ModelRoute is an AI model execution marketplace. You submit a request with a mod
     Run your first execution in 5 minutes.
   </Card>
   <Card title="Authentication" icon="key" href="/authentication">
-    Learn how API keys work and how to manage them.
+    API key management, rotation, and permissions.
   </Card>
 </CardGroup>

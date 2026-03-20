@@ -19,7 +19,7 @@
           },
           {
             "group": "Executions",
-            "pages": ["executions/overview", "executions/sync", "executions/async"]
+            "pages": ["executions/overview", "executions/create", "executions/polling", "executions/webhooks"]
           },
           {
             "group": "Files",

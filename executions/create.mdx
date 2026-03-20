@@ -1,0 +1,125 @@
+---
+title: Creating an Execution
+description: Submit an AI model execution and receive a tracking ID immediately.
+---
+
+## Submit a request
+
+Every execution starts with a `POST` to `/v1/executions`. You get a `202 Accepted` response immediately — the actual AI processing happens asynchronously.
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.modelroute.ai/v1/executions \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: my-unique-key-123" \
+  -d '{
+    "model": "flux-1.1-pro",
+    "input": {
+      "prompt": "A futuristic city skyline at sunset"
+    }
+  }'
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "https://api.modelroute.ai/v1/executions",
+    headers={
+        "Authorization": "Bearer sk_your_api_key_here",
+        "Idempotency-Key": "my-unique-key-123"
+    },
+    json={
+        "model": "flux-1.1-pro",
+        "input": {
+            "prompt": "A futuristic city skyline at sunset"
+        }
+    }
+)
+execution = response.json()
+print(f"Execution ID: {execution['id']}")
+```
+
+```typescript TypeScript
+const response = await fetch("https://api.modelroute.ai/v1/executions", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer sk_your_api_key_here",
+    "Content-Type": "application/json",
+    "Idempotency-Key": "my-unique-key-123"
+  },
+  body: JSON.stringify({
+    model: "flux-1.1-pro",
+    input: {
+      prompt: "A futuristic city skyline at sunset"
+    }
+  })
+});
+const execution = await response.json();
+console.log(`Execution ID: ${execution.id}`);
+```
+
+</CodeGroup>
+
+## Response
+
+```json
+{
+  "id": "exec_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "PENDING",
+  "model": "flux-1.1-pro",
+  "hold_amount": "0.048",
+  "estimated_cost": "0.040",
+  "expires_at": "2026-03-20T10:35:00Z",
+  "created_at": "2026-03-20T10:30:00Z"
+}
+```
+
+The response tells you:
+- **`id`** — use this to track the execution
+- **`status`** — starts as `PENDING`, will move to `PROCESSING` → `COMPLETED` or `FAILED`
+- **`hold_amount`** — the amount reserved from your balance (refunded if execution fails)
+- **`expires_at`** — when the execution times out if no result is received
+
+## Using file references
+
+If your model requires image or audio input, upload files first and reference them:
+
+```bash
+curl -X POST https://api.modelroute.ai/v1/executions \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: video-gen-456" \
+  -d '{
+    "model": "seedance-video",
+    "input": {
+      "prompt": "Animate this scene with gentle motion",
+      "source_image": "file_f47ac10b-58cc-4372-a567-0e02b2c3d479",
+      "duration": 5
+    }
+  }'
+```
+
+<Info>
+ModelRoute never accepts raw URLs in execution input. All files must be uploaded first via the [file upload flow](/files/uploading), giving you a `file_` reference to use here. This ensures your files are never exposed to third-party providers.
+</Info>
+
+## What happens next
+
+After submitting, you have two options to get results:
+
+1. **[Set up webhooks](/executions/webhooks)** (recommended for production) — receive an `execution.completed` event automatically
+2. **[Poll for status](/executions/polling)** — check `GET /v1/executions/{id}` until the status is terminal
+
+## Cancellation
+
+Cancel a pending or processing execution:
+
+```bash
+curl -X POST https://api.modelroute.ai/v1/executions/{execution_id}/cancel \
+  -H "Authorization: Bearer sk_your_api_key_here"
+```
+
+The balance hold is released immediately on cancellation.

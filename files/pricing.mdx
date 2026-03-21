@@ -52,6 +52,18 @@ This means mid-month uploads and deletes are prorated automatically. You only pa
 1.33 GB x $0.05 = $0.067 for that month
 ```
 
+## What is included
+
+Every file stored on ModelRoute gets:
+
+- **Global CDN delivery** -- files are cached and served from the nearest edge location
+- **Provider-isolated file handling** -- your files never touch provider infrastructure directly
+- **Zero-trust security** -- content type detection, UUID filenames, server-verified sizes
+- **Full audit trail** -- every upload and delete is tracked with who, when, and from where
+- **Automatic TTL expiration** -- files auto-delete based on your organization's retention policy
+- **Compliance cloning** -- input files are automatically cloned to a separate audit bucket
+- **Three-region redundancy** -- store files in US, EU, or APAC based on your data residency needs
+
 ## Regions
 
 ModelRoute stores files across three regions:
@@ -79,20 +91,6 @@ This lets you see exactly where your storage is allocated and what it costs.
 Volume discounts are available for organizations storing over 1 TB per month.
 
 To discuss enterprise pricing, contact **enterprise@modelroute.ai** and include your **Account ID** (found in your dashboard settings).
-
-## Comparison with alternatives
-
-| Feature | ModelRoute | AWS S3 Standard | Cloudflare R2 |
-|-|-|-|-|
-| Storage | $0.05/GB/mo | $0.023/GB/mo | $0.015/GB/mo |
-| Uploads | Free | $0.005/1K PUT | $4.50/M Class A |
-| Downloads | Free | $0.0004/1K GET | $0.36/M Class B |
-| Egress | Free | $0.09/GB | Free |
-| Regions | 3 (US, EU, APAC) | 30+ | 200+ |
-| CDN included | Yes | No (CloudFront extra) | Yes |
-| File intermediation | Yes | No | No |
-
-ModelRoute includes CDN delivery, provider-isolated file handling, and simple per-GB pricing. No need to estimate request counts or calculate egress fees.
 
 ## Next steps
 

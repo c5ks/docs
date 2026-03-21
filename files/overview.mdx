@@ -7,11 +7,22 @@ description: How ModelRoute handles file uploads and downloads securely.
 
 ModelRoute acts as a secure intermediary between you and AI providers. When you upload a file:
 
-1. **Your file stays on ModelRoute** — providers never receive your original file URL or storage credentials
+1. **Your file stays on ModelRoute** -- providers never receive your original file URL or storage credentials
 2. **ModelRoute transfers the file** to the provider using provider-specific mechanisms
-3. **Output files are stored on ModelRoute** — you download them via ModelRoute, not from the provider
+3. **Output files are stored on ModelRoute** -- you download them via ModelRoute, not from the provider
 
 This design ensures provider isolation. Switching providers or adding new ones never requires changes to your file handling code.
+
+## Zero-trust security
+
+ModelRoute never trusts client-provided metadata. When you upload a file:
+
+- **Content type** is detected server-side from file magic bytes
+- **Filename** is replaced with a UUID -- original filenames are never stored
+- **File size** is measured from the actual uploaded bytes in storage
+- **Uploads are streamed** -- the server never holds the full file in memory
+
+You send raw bytes. ModelRoute handles everything else.
 
 ## File references
 
@@ -31,23 +42,37 @@ Use file references in execution inputs (e.g., an image to transform) and read t
 |-|-|
 | Maximum file size | 150 MB |
 | Supported upload method | Presigned URL (PUT) |
-| File retention | Files are retained for the lifetime of your organization |
-| File access | Scoped to your organization — no cross-org access |
+| Default TTL | Configurable per-organization (1-365 days) |
+| File access | Scoped to your organization -- no cross-org access |
 
 ## File lifecycle
 
 ```mermaid
 flowchart LR
     A[Request presigned URL] --> B[Upload via PUT]
-    B --> C[File available]
-    C --> D[Use in execution input]
-    C --> E[Download anytime]
+    B --> C[Confirm upload]
+    C --> D[File active]
+    D --> E[Use in execution input]
+    D --> F[Download anytime]
+    D --> G[Auto-expire via TTL]
 ```
 
-1. **Request a presigned upload URL** — `POST /v1/files/upload`
-2. **Upload via HTTP PUT** to the presigned URL
-3. **Use the file reference** in execution inputs
-4. **Download results** — execution outputs contain file references you can download
+1. **Request a presigned upload URL** -- `POST /v1/files/upload`
+2. **Upload via HTTP PUT** to the presigned URL (raw bytes, no metadata)
+3. **Confirm the upload** -- `POST /v1/files/confirm`
+4. **Use the file reference** in execution inputs
+5. **Download results** -- execution outputs contain file references you can download
+6. **Files auto-expire** based on your organization's TTL settings
+
+## Audit trail
+
+Every upload and delete is tracked with full attribution:
+
+- **Who** -- API key ID or console user ID
+- **When** -- timestamp of the action
+- **From where** -- IP address of the request
+
+View the complete activity log in the Storage (CDN) page of your dashboard.
 
 ## Next steps
 

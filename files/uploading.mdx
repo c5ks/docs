@@ -3,6 +3,17 @@ title: Uploading Files
 description: Upload images, audio, and video files to use as execution inputs.
 ---
 
+## How uploading works
+
+ModelRoute handles file uploads with zero trust. You send the raw file bytes, and ModelRoute:
+
+- **Detects the content type** from file magic bytes (never trusts client-declared MIME types)
+- **Generates a UUID filename** (original filenames are never stored or exposed)
+- **Verifies the actual file size** from the uploaded bytes (declared sizes are always overridden)
+- **Streams the upload** to storage without buffering the entire file in memory
+
+You never need to tell ModelRoute what your file is. ModelRoute figures it out from the bytes.
+
 ## Step 1: Request a presigned upload URL
 
 ```bash
@@ -10,9 +21,7 @@ curl -X POST https://api.modelroute.ai/v1/files/upload \
   -H "Authorization: Bearer sk_your_api_key_here" \
   -H "Content-Type: application/json" \
   -d '{
-    "filename": "input-photo.png",
-    "content_type": "image/png",
-    "size_bytes": 2048576
+    "purpose": "INPUT"
   }'
 ```
 
@@ -20,9 +29,9 @@ curl -X POST https://api.modelroute.ai/v1/files/upload \
 
 | Field | Type | Required | Description |
 |-|-|-|-|
-| `filename` | string | Yes | Original filename (used for content-type validation) |
-| `content_type` | string | Yes | MIME type (e.g., `image/png`, `audio/mp3`, `video/mp4`) |
-| `size_bytes` | integer | Yes | File size in bytes. Maximum: 157,286,400 (150 MB) |
+| `purpose` | string | Yes | `INPUT` for execution inputs, `UPLOAD` for general storage |
+| `region` | string | No | Storage region: `US` (default), `EU`, or `APAC` |
+| `ttl_days` | integer | No | Auto-delete after N days (1-365). Uses your org default if omitted. |
 
 ### Response
 
@@ -42,13 +51,12 @@ curl -X POST https://api.modelroute.ai/v1/files/upload \
 
 ## Step 2: Upload the file
 
-Use an HTTP PUT request to upload the file to the presigned URL:
+Use an HTTP PUT request to upload the raw file bytes to the presigned URL:
 
 <CodeGroup>
 ```bash curl
 curl -X PUT "https://storage.modelroute.ai/uploads/file_f47ac10b...?X-Amz-Signature=..." \
-  -H "Content-Type: image/png" \
-  --data-binary @input-photo.png
+  --data-binary @photo.png
 ```
 
 ```python Python
@@ -57,12 +65,8 @@ import requests
 # From step 1
 upload_url = "https://storage.modelroute.ai/uploads/file_f47ac10b...?X-Amz-Signature=..."
 
-with open("input-photo.png", "rb") as f:
-    response = requests.put(
-        upload_url,
-        data=f,
-        headers={"Content-Type": "image/png"}
-    )
+with open("photo.png", "rb") as f:
+    response = requests.put(upload_url, data=f)
     assert response.status_code == 200
 ```
 
@@ -70,21 +74,51 @@ with open("input-photo.png", "rb") as f:
 import fs from "fs";
 
 const uploadUrl = "https://storage.modelroute.ai/uploads/file_f47ac10b...?X-Amz-Signature=...";
-const fileBuffer = fs.readFileSync("input-photo.png");
 
 const response = await fetch(uploadUrl, {
   method: "PUT",
-  headers: { "Content-Type": "image/png" },
-  body: fileBuffer,
+  body: fs.readFileSync("photo.png"),
 });
 ```
 </CodeGroup>
 
-<Warning>
-  The `Content-Type` header in the PUT request must match the `content_type` you specified in step 1. Mismatched types will be rejected.
-</Warning>
+<Info>
+  ModelRoute detects the file type from the first bytes of the uploaded content. You do not need to set a `Content-Type` header on the PUT request. If you do set one, ModelRoute will override it with the server-detected type.
+</Info>
 
-## Step 3: Use the file reference
+## Step 3: Confirm the upload
+
+After the PUT completes, confirm the upload so ModelRoute can verify the file in storage:
+
+```bash
+curl -X POST https://api.modelroute.ai/v1/files/confirm \
+  -H "Authorization: Bearer sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "file_id": "file_f47ac10b-58cc-4372-a567-0e02b2c3d479"
+  }'
+```
+
+ModelRoute will:
+- Verify the file exists in storage
+- Read the actual file size from storage (not from any client-declared value)
+- Detect the content type from the file bytes
+- Generate a compliance clone for audit purposes
+- Return the confirmed file metadata
+
+### Confirm response
+
+```json
+{
+  "id": "file_f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "status": "ACTIVE",
+  "content_type": "image/png",
+  "size_bytes": 2048576,
+  "created_at": "2026-03-20T10:30:00Z"
+}
+```
+
+## Step 4: Use the file reference
 
 Pass the `file_id` in your execution input:
 
@@ -101,14 +135,27 @@ curl -X POST https://api.modelroute.ai/v1/executions \
   }'
 ```
 
+## Security model
+
+ModelRoute follows a zero-trust approach to file handling:
+
+| Concern | How ModelRoute handles it |
+|-|-|
+| Filename injection | Original filenames are discarded. All files get UUID-based names. |
+| Content type spoofing | MIME type is detected server-side from file magic bytes, never from client headers. |
+| Size manipulation | Actual file size is read from storage after upload, not from client-declared values. |
+| Path traversal | Object keys are generated server-side using UUIDs. No user input enters storage paths. |
+| Memory exhaustion | Uploads are streamed through io.Pipe. The server never holds the full file in memory. |
+| Cross-org access | Every file is scoped to the uploading organization. Ownership is verified on every access. |
+
 ## Error handling
 
 | Error code | Cause |
 |-|-|
-| `INPUT_VALIDATION_ERROR` | Missing filename, invalid content_type, or size exceeds 150 MB |
-| `FILE_FORMAT_UNSUPPORTED` | The model does not support this file format |
+| `UNSUPPORTED_CONTENT_TYPE` | The detected file type is not in the allow-list |
+| `QUOTA_EXCEEDED` | Organization storage quota reached. Delete files or request a quota increase. |
 | `FILE_NOT_FOUND` | The file reference does not exist or the upload was not completed |
-| `INSUFFICIENT_BALANCE` | Not enough balance to process the execution with this file |
+| `RATE_LIMITED` | Too many upload requests. Retry after a short delay. |
 
 ## Complete upload flow example
 
@@ -124,21 +171,26 @@ HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 upload_resp = requests.post(
     f"{BASE}/files/upload",
     headers=HEADERS,
-    json={
-        "filename": "photo.png",
-        "content_type": "image/png",
-        "size_bytes": 2048576
-    }
+    json={"purpose": "INPUT"}
 ).json()
 
 file_id = upload_resp["file_id"]
 upload_url = upload_resp["upload_url"]
 
-# 2. Upload the file
+# 2. Upload the file (just raw bytes, no metadata needed)
 with open("photo.png", "rb") as f:
-    requests.put(upload_url, data=f, headers={"Content-Type": "image/png"})
+    requests.put(upload_url, data=f)
 
-# 3. Use in execution
+# 3. Confirm the upload
+confirm = requests.post(
+    f"{BASE}/files/confirm",
+    headers=HEADERS,
+    json={"file_id": file_id}
+).json()
+
+print(f"Uploaded: {confirm['content_type']}, {confirm['size_bytes']} bytes")
+
+# 4. Use in execution
 result = requests.post(
     f"{BASE}/executions",
     headers=HEADERS,
@@ -152,5 +204,48 @@ result = requests.post(
 ).json()
 
 print(f"Execution {result['id']}: {result['status']}")
+```
+
+```typescript TypeScript
+import fs from "fs";
+
+const API_KEY = "sk_your_api_key_here";
+const BASE = "https://api.modelroute.ai/v1";
+const headers = { "Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json" };
+
+// 1. Request presigned URL
+const uploadResp = await fetch(`${BASE}/files/upload`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ purpose: "INPUT" }),
+}).then(r => r.json());
+
+// 2. Upload raw file bytes
+await fetch(uploadResp.upload_url, {
+  method: "PUT",
+  body: fs.readFileSync("photo.png"),
+});
+
+// 3. Confirm
+const confirm = await fetch(`${BASE}/files/confirm`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ file_id: uploadResp.file_id }),
+}).then(r => r.json());
+
+console.log(`Uploaded: ${confirm.content_type}, ${confirm.size_bytes} bytes`);
+
+// 4. Use in execution
+const result = await fetch(`${BASE}/executions`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    model: "flux-1.1-pro",
+    input: {
+      prompt: "Make this photo look like a watercolor painting",
+      image: uploadResp.file_id,
+    },
+  }),
+}).then(r => r.json());
 ```
 </CodeGroup>

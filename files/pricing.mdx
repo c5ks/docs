@@ -17,7 +17,9 @@ ModelRoute charges a single, predictable rate for file storage:
 
 All three regions (US, EU, APAC) are priced identically. There are no hidden fees, no per-request charges, and no bandwidth costs.
 
-## How billing works
+## How it works
+
+Files you upload are stored on Cloudflare R2 and served through a global CDN. When a file is requested, it is cached and delivered from the closest edge location to the requester. This means fast downloads regardless of where your users are located.
 
 Storage is billed on a **30-day billing cycle** using GB-days:
 
@@ -64,13 +66,19 @@ All regions are priced the same. Your dashboard shows per-region usage and cost 
 
 ## Per-region breakdown
 
-The console CDN page shows a per-region breakdown including:
+The Storage (CDN) page in your dashboard shows a per-region breakdown including:
 
 - Current storage (GB)
 - Month-to-date cost
 - CDN domain
 
 This lets you see exactly where your storage is allocated and what it costs.
+
+## Volume discounts
+
+Volume discounts are available for organizations storing over 1 TB per month.
+
+To discuss enterprise pricing, contact **enterprise@modelroute.ai** and include your **Account ID** (found in your dashboard settings).
 
 ## Comparison with alternatives
 

@@ -22,7 +22,7 @@ curl -X POST https://api.modelroute.ai/v1/files/upload \
 |-|-|-|-|
 | `filename` | string | Yes | Original filename (used for content-type validation) |
 | `content_type` | string | Yes | MIME type (e.g., `image/png`, `audio/mp3`, `video/mp4`) |
-| `size_bytes` | integer | Yes | File size in bytes. Maximum: 104,857,600 (100 MB) |
+| `size_bytes` | integer | Yes | File size in bytes. Maximum: 157,286,400 (150 MB) |
 
 ### Response
 
@@ -105,7 +105,7 @@ curl -X POST https://api.modelroute.ai/v1/executions \
 
 | Error code | Cause |
 |-|-|
-| `INPUT_VALIDATION_ERROR` | Missing filename, invalid content_type, or size exceeds 100 MB |
+| `INPUT_VALIDATION_ERROR` | Missing filename, invalid content_type, or size exceeds 150 MB |
 | `FILE_FORMAT_UNSUPPORTED` | The model does not support this file format |
 | `FILE_NOT_FOUND` | The file reference does not exist or the upload was not completed |
 | `INSUFFICIENT_BALANCE` | Not enough balance to process the execution with this file |

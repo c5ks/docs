@@ -38,7 +38,7 @@ Execution modes: SYNC, ASYNC, STREAMING
 POST /v1/files/upload — Get presigned upload URL
   Request: { filename, content_type, size_bytes }
   Response: { file_id, upload_url, expires_at }
-  Max file size: 100 MB
+  Max file size: 150 MB
 
 PUT {upload_url} — Upload file to presigned URL
 GET /v1/files/{file_id}/download — Download a file

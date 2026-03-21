@@ -1,0 +1,98 @@
+---
+title: Storage Pricing
+description: How ModelRoute bills for file storage across all regions.
+---
+
+## Pricing
+
+ModelRoute charges a single, predictable rate for file storage:
+
+| Item | Price |
+|-|-|
+| Storage | $0.05 per GB per month |
+| Uploads | Free |
+| Downloads | Free |
+| Ingress | Free |
+| Egress | Free |
+
+All three regions (US, EU, APAC) are priced identically. There are no hidden fees, no per-request charges, and no bandwidth costs.
+
+## How billing works
+
+Storage is billed on a **30-day billing cycle** using GB-days:
+
+1. Each file accumulates GB-days from the moment it is uploaded until it is deleted (or the billing cycle ends)
+2. At the end of the cycle, total GB-days are divided by 30 to get the average GB stored
+3. The average GB is multiplied by $0.05
+
+This means mid-month uploads and deletes are prorated automatically. You only pay for what you store, for as long as you store it.
+
+### Example calculations
+
+**Constant storage:** 10 GB stored for the full month
+
+```
+10 GB x 30 days / 30 days = 10 GB average
+10 GB x $0.05 = $0.50/month
+```
+
+**Mid-month upload:** 5 GB uploaded on day 15, kept for the rest of the month
+
+```
+5 GB x 15 days / 30 days = 2.5 GB average
+2.5 GB x $0.05 = $0.125 for that month
+```
+
+**Short-lived file:** 20 GB uploaded on day 10, deleted on day 12 (2 days)
+
+```
+20 GB x 2 days / 30 days = 1.33 GB average
+1.33 GB x $0.05 = $0.067 for that month
+```
+
+## Regions
+
+ModelRoute stores files across three regions:
+
+| Region | Location | CDN Domain |
+|-|-|-|
+| US | Virginia, USA | cdn-us.modelroute.ai |
+| EU | Frankfurt, Germany | cdn-eu.modelroute.ai |
+| APAC | Singapore | cdn-apac.modelroute.ai |
+
+All regions are priced the same. Your dashboard shows per-region usage and cost breakdowns.
+
+## Per-region breakdown
+
+The console CDN page shows a per-region breakdown including:
+
+- Current storage (GB)
+- Month-to-date cost
+- CDN domain
+
+This lets you see exactly where your storage is allocated and what it costs.
+
+## Comparison with alternatives
+
+| Feature | ModelRoute | AWS S3 Standard | Cloudflare R2 |
+|-|-|-|-|
+| Storage | $0.05/GB/mo | $0.023/GB/mo | $0.015/GB/mo |
+| Uploads | Free | $0.005/1K PUT | $4.50/M Class A |
+| Downloads | Free | $0.0004/1K GET | $0.36/M Class B |
+| Egress | Free | $0.09/GB | Free |
+| Regions | 3 (US, EU, APAC) | 30+ | 200+ |
+| CDN included | Yes | No (CloudFront extra) | Yes |
+| File intermediation | Yes | No | No |
+
+ModelRoute includes CDN delivery, provider-isolated file handling, and simple per-GB pricing. No need to estimate request counts or calculate egress fees.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Uploading Files" icon="upload" href="/files/uploading">
+    Upload files via presigned URLs.
+  </Card>
+  <Card title="Downloading Files" icon="download" href="/files/downloading">
+    Download execution results via CDN.
+  </Card>
+</CardGroup>
